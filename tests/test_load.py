@@ -3,9 +3,9 @@ import pytest
 
 
 @pytest.mark.parametrize("path,expected", [
-        ("tests/step1/valid.json", []),
-        ("tests/step2/valid.json", ["key", "value"]),
-        ("tests/step2/valid2.json", ["key", "value", "key2", "value"]),
+        ("tests/test_files/valid.json", []),
+        ("tests/test_files/valid2.json", ["key", "value"]),
+        ("tests/test_files/valid3.json", ["key", "value", "key2", "value"]),
 ])
 def test_load(path, expected):
     tokens = load(path)
@@ -13,7 +13,7 @@ def test_load(path, expected):
 
 
 @pytest.mark.parametrize("path", [
-        "tests/step1/invalid_empty.json",
+        "tests/test_files/invalid_empty.json",
     ]
 )
 def test_load_empty(path):
@@ -23,7 +23,7 @@ def test_load_empty(path):
 
 
 @pytest.mark.parametrize("path", [
-        "tests/step2/invalid_key.json",
+        "tests/test_files/invalid_key.json",
     ]
 )
 def test_fail_invali_key(path):
@@ -33,7 +33,7 @@ def test_fail_invali_key(path):
 
 
 @pytest.mark.parametrize("path", [
-        "tests/step2/invalid_extra_comma.json",
+        "tests/test_files/invalid_extra_comma.json",
     ]
 )
 def test_fail_extra_comma(path):
@@ -43,7 +43,7 @@ def test_fail_extra_comma(path):
 
 
 @pytest.mark.parametrize("path", [
-        "tests/step2/invalid_after_end.json",
+        "tests/test_files/invalid_after_end.json",
     ]
 )
 def test_fail_after_end(path):
@@ -53,10 +53,16 @@ def test_fail_after_end(path):
 
 
 @pytest.mark.parametrize("path", [
-        "tests/step2/invalid_between_tokens.json",
+        "tests/test_files/invalid_between_tokens.json",
     ]
 )
 def test_fail_between_tokens(path):
     with pytest.raises(Exception) as e:
         load(path)
     assert "Invalid json: expected comma" in str(e.value)
+
+
+def test_invalid_close_bracket():
+    with pytest.raises(Exception) as e:
+        load("tests/test_files/invalid_close_bracket.json")
+    assert "Invalid json: Invalid character } before start" in str(e.value)
