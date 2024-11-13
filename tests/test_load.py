@@ -3,13 +3,13 @@ import pytest
 
 
 @pytest.mark.parametrize("path,expected", [
-        ("tests/test_files/valid.json", []),
-        ("tests/test_files/valid2.json", ["key", "value"]),
-        ("tests/test_files/valid3.json", ["key", "value", "key2", "value"]),
+        ("tests/test_files/valid.json", {}),
+        ("tests/test_files/valid2.json", {"key": "value"}),
+        ("tests/test_files/valid3.json", {"key": "value", "key2": "value"}),
 ])
 def test_load(path, expected):
-    tokens = load(path)
-    assert tokens == expected
+    result = load(path)
+    assert result == expected
 
 
 @pytest.mark.parametrize("path", [
