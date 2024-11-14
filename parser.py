@@ -11,28 +11,56 @@ class Status(Enum):
     END_VALUE = auto()
     WAIT_KEY = auto()
     WAIT_VALUE = auto()
+    # list events
+    WAIT_LIST_TOKEN = auto()
+    COLLECTING_LIST_TOKEN = auto()
+    END_LIST_TOKEN = auto()
+
     FINISHED = auto()
 
-to_skip = (" ", "\n")
+    @classmethod
+    def collecting_statuses(cls):
+        return {
+            Status.COLLECTING_KEY,
+            Status.COLLECTING_VALUE,
+            Status.COLLECTING_LIST_TOKEN,
+        }
+
+chars_to_skip = (" ", "\n")
 
 class JsonLoader:
-    def __init__(self, status = Status.NOT_STARTED):
+    def __init__(self, status = Status.NOT_STARTED, result = None):
         self.tokens = []
-        self.result = {}
         self.status = status
-        self.result = {}
+        self.result = result
         self.cur_token = ""
 
     def handle_not_started(self, char: str) -> None:
-        if char in to_skip:
-            return
-        if char in {"[", "{"}:
+        if char == "{":
             self.status = Status.WAIT_KEY
-            return
-        raise Exception(
-            f"Invalid json: Invalid character {char} before start. status - not started"
-        )
+            self.result = {}
+        elif char == "[":
+            self.status = Status.WAIT_LIST_TOKEN
+            self.result = []
+        else:
+            raise Exception(
+                f"Invalid json: Invalid character {char} before start. status - not started"
+            )
 
+    def handle_wait_key(self, char: str) -> None:
+        if char == "}" and not self.result:
+            self.status = Status.FINISHED
+            self.cur_token = ""
+        elif char == '"':
+            self.status = Status.COLLECTING_KEY
+            self.cur_token = ""
+        elif char == "}" and self.result:
+            raise Exception(f"Invalid json: waiting for new key. Found {char}")
+        else:
+            raise Exception(
+                f"Invalid json: expecting quotes. Found {char}. status - wait key"
+            )
+        
     def handle_collecting_key(self, char: str) -> None:
         if char == '"':
             self.tokens.append(self.cur_token)
@@ -41,6 +69,25 @@ class JsonLoader:
         else:
             self.cur_token += char
 
+    def handle_end_key(self, char: str) -> None:
+        if char == ":":
+            self.status = Status.WAIT_VALUE
+        else:
+            raise Exception(
+                f"Invalid json: expected semicolon. Found {char}. status - end key"
+            )
+        
+    def handle_wait_value(self, char: str) -> None:
+        if char == '"':
+            self.status = Status.COLLECTING_VALUE
+        elif char == "[":
+            self.status = Status.WAIT_LIST_TOKEN
+            return
+        else:
+            raise Exception(
+                f"Invalid json: expecting quotes. Found {char}. status - wait value"
+            )
+        
     def handle_collecting_value(self, char: str) -> None:
         if char == '"':
             self.tokens.append(self.cur_token)
@@ -49,19 +96,7 @@ class JsonLoader:
         else:
             self.cur_token += char
 
-    def handle_end_key(self, char: str) -> None:
-        if char in to_skip:
-            return
-        if char == ":":
-            self.status = Status.WAIT_VALUE
-        else:
-            raise Exception(
-                f"Invalid json: expected semicolon. Found {char}. status - end key"
-            )
-
     def handle_end_value(self, char: str) -> None:
-        if char in to_skip:
-            return
         if char == ",":
             self.status = Status.WAIT_KEY
         elif char == "}":
@@ -70,32 +105,32 @@ class JsonLoader:
             raise Exception(
                 f"Invalid json: expected comma. Found {char}. status - end value"
             )
-
-    def handle_wait_key(self, char: str) -> None:
-        if char == "}" and not self.tokens:
-            self.status = Status.FINISHED
+    
+    def handle_wait_list_token(self, char: str) -> None:
+        if char == '"':
+            self.status = Status.COLLECTING_LIST_TOKEN
             self.cur_token = ""
-        elif char in to_skip:
-            return
-        elif char == '"':
-            self.status = Status.COLLECTING_KEY
-            self.cur_token = ""
-        elif char == "}" and self.tokens:
-            raise Exception(f"Invalid json: waiting for new key. Found {char}")
         else:
             raise Exception(
-                f"Invalid json: expecting quotes. Found {char}. status - wait key"
+                f"Invalid json: expecting `'`. Found {char}. status - wait list key"
             )
-
-    def handle_wait_value(self, char: str) -> None:
-        if char in to_skip:
-            self.status = Status.WAIT_VALUE
-        elif char == '"':
-            self.status = Status.COLLECTING_VALUE
+    
+    def handle_collecting_list_token(self, char: str) -> None:
+        if char == '"':
+            self.tokens.append(self.cur_token)
+            self.status = Status.END_LIST_TOKEN
             self.cur_token = ""
         else:
+            self.cur_token += char
+    
+    def handle_end_list_token(self, char: str) -> None:
+        if char == ",":
+            self.status = Status.WAIT_LIST_TOKEN
+        elif char == "]":
+            self.status = Status.END_VALUE
+        else:
             raise Exception(
-                f"Invalid json: expecting quotes. Found {char}. status - wait value"
+                f"Invalid json: expected comma. Found {char}. status - end list key"
             )
 
     def get_handler(self):
@@ -107,6 +142,9 @@ class JsonLoader:
             Status.END_VALUE: self.handle_end_value,
             Status.WAIT_KEY: self.handle_wait_key,
             Status.WAIT_VALUE: self.handle_wait_value,
+            Status.WAIT_LIST_TOKEN: self.handle_wait_list_token,
+            Status.COLLECTING_LIST_TOKEN: self.handle_collecting_list_token,
+            Status.END_LIST_TOKEN: self.handle_end_list_token,
         }
         return handler_map[self.status]
 
@@ -117,14 +155,15 @@ class JsonLoader:
     def load(self, f):
         char = f.read(1)
         while char and self.status is not Status.FINISHED:
-            if self.status is Status.WAIT_VALUE and char == "{":
-                result = JsonLoader(status=Status.WAIT_KEY).load(f)
-                self.tokens.append(result)
-                self.status = Status.END_VALUE
-            else:
-                handler = self.get_handler()
-                handler(char)
-            self.load_result()
+            if char not in chars_to_skip or self.status in Status.collecting_statuses():
+                if self.status is Status.WAIT_VALUE and char == "{":
+                    result = JsonLoader(Status.WAIT_KEY, {}).load(f)
+                    self.tokens.append(result)
+                    self.status = Status.END_VALUE
+                else:
+                    handler = self.get_handler()
+                    handler(char)
+                self.load_result()
             char = f.read(1)
         if self.status is Status.NOT_STARTED:
             raise Exception("Invalid json - Empty file.")
@@ -138,7 +177,7 @@ def load(file_path: str) -> list[str]:
         result = reader.load(f)
         char = f.read(1)
         while char:
-            if char not in to_skip:
+            if char not in chars_to_skip:
                 raise Exception(
                     f"Invalid json: expecting no characters after close bracket. Found {char}. status - finished"
                 )
