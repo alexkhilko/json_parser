@@ -16,6 +16,13 @@ import pytest
             "tests/test_files/valid_list.json",
             ["foo", "bar", "baz"],
         ),
+        (
+            "tests/test_files/valid_nested2.json",
+            {
+                "key": {"key4": ["val4"], "key5": {"key6": ["val6", "val7"]}},
+                "key2": ["val1", "val2"],
+            },
+        ),
     ],
 )
 def test_load(path, expected):
