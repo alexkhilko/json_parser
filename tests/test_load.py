@@ -6,7 +6,7 @@ import pytest
     "path,expected",
     [
         ("tests/test_files/valid.json", {}),
-        ("tests/test_files/valid2.json", {"key": "value"}),
+        ("tests/test_files/valid2.json", {"key": "value", "key2": -344, "key3": 588}),
         ("tests/test_files/valid3.json", {"key": "value", "key2": "value"}),
         (
             "tests/test_files/valid_nested.json",

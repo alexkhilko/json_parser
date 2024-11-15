@@ -1,1 +1,5 @@
-{"key": "value"}
+{
+    "key": "value",
+    "key2": -344,
+    "key3": 588
+}

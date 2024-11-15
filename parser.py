@@ -28,6 +28,7 @@ class JsonLoader:
         self.status = status
         self.result = result
         self.cur_token = ""
+        self.is_numeric_token = False
     
     def raise_exception(self, reason):
         raise Exception(
@@ -70,16 +71,29 @@ class JsonLoader:
         self.status = Status.WAIT_VALUE
         
     def handle_wait_value(self, char: str) -> None:
-        if char != '"':
+        if char.isdigit() or char in {"-", "+"}:
+            self.cur_token = char
+            self.status = Status.COLLECTING_VALUE
+            self.is_numeric_token = True
+        elif char == '"':
+            self.status = Status.COLLECTING_VALUE
+        else:
             self.raise_exception(f"expecting quotes. Found {char}")
-        self.status = Status.COLLECTING_VALUE
         
     def handle_collecting_value(self, char: str) -> None:
-        if char == '"':
-            self.tokens.append(self.cur_token)
+        if char == '"' or (char in chars_to_skip and self.is_numeric_token):
+            token = int(self.cur_token) if self.is_numeric_token else self.cur_token
+            self.tokens.append(token)
             self.status = Status.END_VALUE
             self.cur_token = ""
+        elif char == "," and self.is_numeric_token:
+            token = int(self.cur_token) if self.is_numeric_token else self.cur_token
+            self.tokens.append(token)
+            self.status = Status.WAIT_KEY if self.is_object() else Status.WAIT_VALUE
+            self.cur_token = ""
         else:
+            if self.is_numeric_token and not char.isdigit():
+                self.raise_exception(f"expecting digit token symbol. found: {char}")
             self.cur_token += char
     
     def is_object(self):
@@ -107,13 +121,15 @@ class JsonLoader:
         return handler_map[self.status]
 
     def load_result(self):
-        if self.status is Status.END_VALUE and self.tokens:
-            if self.is_object():
-                self.result[self.tokens[0]] = self.tokens[1]
-            else:
-                self.result.append(self.tokens[0])
+        if len(self.tokens) == 0:
+            return
+        if len(self.tokens) == 2 and self.is_object():
+            self.result[self.tokens[-2]] = self.tokens[-1]
             self.tokens = []
-        
+        elif not self.is_object():
+            self.result.append(self.tokens[-1])
+            self.tokens = []
+
 
     def load(self, f):
         char = f.read(1)
