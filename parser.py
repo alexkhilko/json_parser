@@ -19,16 +19,72 @@ class Status(Enum):
             Status.COLLECTING_KEY,
             Status.COLLECTING_VALUE,
         }
+    
 
-chars_to_skip = (" ", "\n")
+class TokenType(Enum):
+    STRING = auto()
+    NUMBER = auto()
+    # true, false, null
+    MIX = auto()
+
+EMPTY_CHARS = (" ", "\n")
+
+class Token:
+    def __init__(self, token_type: TokenType = TokenType.STRING, value: str = ""):
+        self.type = token_type
+        self._value = value
+    
+    MIX_TOKENS = {
+        "null": None,
+        "true": True,
+        "false": False,
+    }
+    
+    def raise_exception(self, reason):
+        raise Exception(
+            f"Invalid token value: {reason}."
+        )
+    
+    def validate_next_char(self, char: str):
+        if self.type is TokenType.NUMBER and not char.isdigit():
+            self.raise_exception(f"expecting digit token symbol. found: {char}")
+        if self.type is TokenType.MIX:
+            token = self._value + char
+            if not any(token == option[:len(token)] for option in self.MIX_TOKENS):
+                self.raise_exception(f"expecting null, true, false. found: {token}")
+    
+    def _validate_final_token(self):
+        if self.type is not TokenType.MIX:
+            return
+        if self._value not in self.MIX_TOKENS:
+            self.raise_exception(f"expecting null, true, false. found: {self._value}")
+    
+    def get_value(self):
+        self._validate_final_token()
+        if self.type is TokenType.NUMBER:
+            return int(self._value)
+        if self.type is TokenType.MIX:
+            return self.MIX_TOKENS[self._value]
+        return self._value
+    
+    def add(self, char: str):
+        self._value += char
+    
+    def update(self, value: str, token_type: TokenType):
+        self._value = value
+        self.type = token_type
+
+    def reset(self):
+        self._value = ""
+        self.type = TokenType.STRING
+
 
 class JsonLoader:
-    def __init__(self, status = Status.NOT_STARTED, result = None):
+    def __init__(self, status=Status.NOT_STARTED, result=None):
         self.tokens = []
         self.status = status
         self.result = result
-        self.cur_token = ""
-        self.is_numeric_token = False
+        self.cur_token = Token()
     
     def raise_exception(self, reason):
         raise Exception(
@@ -48,10 +104,10 @@ class JsonLoader:
     def handle_wait_key(self, char: str) -> None:
         if char == "}" and not self.result:
             self.status = Status.FINISHED
-            self.cur_token = ""
+            self.cur_token.reset()
         elif char == '"':
             self.status = Status.COLLECTING_KEY
-            self.cur_token = ""
+            self.cur_token.reset()
         elif char == "}" and self.result:
             self.raise_exception(f"waiting for new key. Found {char}")
         else:
@@ -59,11 +115,11 @@ class JsonLoader:
         
     def handle_collecting_key(self, char: str) -> None:
         if char == '"':
-            self.tokens.append(self.cur_token)
+            self.tokens.append(self.cur_token.get_value())
             self.status = Status.END_KEY
-            self.cur_token = ""
+            self.cur_token.reset()
         else:
-            self.cur_token += char
+            self.cur_token.add(char)
 
     def handle_end_key(self, char: str) -> None:
         if char != ":":
@@ -71,30 +127,25 @@ class JsonLoader:
         self.status = Status.WAIT_VALUE
         
     def handle_wait_value(self, char: str) -> None:
-        if char.isdigit() or char in {"-", "+"}:
-            self.cur_token = char
-            self.status = Status.COLLECTING_VALUE
-            self.is_numeric_token = True
+        if char.isdigit() or char == "-":
+            self.cur_token.update(value=char, token_type=TokenType.NUMBER)
         elif char == '"':
-            self.status = Status.COLLECTING_VALUE
+            self.cur_token.update(value="", token_type=TokenType.STRING)
         else:
-            self.raise_exception(f"expecting quotes. Found {char}")
-        
+            self.cur_token.update(value=char, token_type=TokenType.MIX)
+        self.status = Status.COLLECTING_VALUE
+    
     def handle_collecting_value(self, char: str) -> None:
-        if char == '"' or (char in chars_to_skip and self.is_numeric_token):
-            token = int(self.cur_token) if self.is_numeric_token else self.cur_token
-            self.tokens.append(token)
-            self.status = Status.END_VALUE
-            self.cur_token = ""
-        elif char == "," and self.is_numeric_token:
-            token = int(self.cur_token) if self.is_numeric_token else self.cur_token
-            self.tokens.append(token)
-            self.status = Status.WAIT_KEY if self.is_object() else Status.WAIT_VALUE
-            self.cur_token = ""
+        if (char == '"' and self.cur_token.type is TokenType.STRING) or ((char in EMPTY_CHARS or char == ",") and self.cur_token.type is not TokenType.STRING):
+            self.tokens.append(self.cur_token.get_value())
+            self.cur_token.reset()
+            if char == ",":
+                self.status = Status.WAIT_KEY if self.is_object() else Status.WAIT_VALUE
+            else:
+                self.status = Status.END_VALUE
         else:
-            if self.is_numeric_token and not char.isdigit():
-                self.raise_exception(f"expecting digit token symbol. found: {char}")
-            self.cur_token += char
+            self.cur_token.validate_next_char(char)
+            self.cur_token.add(char)
     
     def is_object(self):
         return isinstance(self.result, dict)
@@ -130,11 +181,10 @@ class JsonLoader:
             self.result.append(self.tokens[-1])
             self.tokens = []
 
-
     def load(self, f):
         char = f.read(1)
         while char:
-            if char in chars_to_skip and self.status not in Status.collecting_statuses():
+            if char in EMPTY_CHARS and self.status not in Status.collecting_statuses():
                 char = f.read(1)
                 continue
             if self.status is Status.WAIT_VALUE and char == "{":
@@ -164,7 +214,7 @@ def load(file_path: str) -> list[str]:
         result = reader.load(f)
         char = f.read(1)
         while char:
-            if char not in chars_to_skip:
+            if char not in EMPTY_CHARS:
                 raise Exception(
                     f"Invalid json: expecting no characters after close bracket. Found {char}. status - finished"
                 )

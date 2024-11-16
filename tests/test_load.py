@@ -6,7 +6,17 @@ import pytest
     "path,expected",
     [
         ("tests/test_files/valid.json", {}),
-        ("tests/test_files/valid2.json", {"key": "value", "key2": -344, "key3": 588}),
+        (
+            "tests/test_files/valid2.json",
+            {
+                "key": "value",
+                "key2": -344,
+                "key3": 588,
+                "key4": None,
+                "key5": True,
+                "key6": False,
+            },
+        ),
         ("tests/test_files/valid3.json", {"key": "value", "key2": "value"}),
         (
             "tests/test_files/valid_nested.json",
@@ -94,3 +104,18 @@ def test_invalid_close_bracket():
     with pytest.raises(Exception) as e:
         load("tests/test_files/invalid_close_bracket.json")
     assert "Invalid json: Invalid character } before start" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "path, error_token",
+    [
+        ("tests/test_files/invalid_false.json", "Fa"),
+        ("tests/test_files/invalid_true.json", "truet"),
+        ("tests/test_files/invalid_null.json", "nul"),
+
+    ],
+)
+def test_invalid_mix_tokens(path, error_token):
+    with pytest.raises(Exception) as e:
+        load(path)
+    assert f"expecting null, true, false. found: {error_token}." in str(e.value)

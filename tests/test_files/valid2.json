@@ -1,5 +1,8 @@
 {
     "key": "value",
     "key2": -344,
-    "key3": 588
+    "key3": 588,
+    "key4": null,
+    "key5": true,
+    "key6": false
 }
