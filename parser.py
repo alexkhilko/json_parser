@@ -1,6 +1,8 @@
 import argparse
 from enum import auto, Enum
 
+from json_parser.exceptions import InvalidTokenException
+
 
 # typical lifetime: NOT_STARTED -> WAIT_KEY -> COLLECTING_KEY -> END_KEY -> WAIT_VALUE -> COLLECTING_VALUE -> END_VALUE -> FINISHED
 class Status(Enum):
@@ -40,24 +42,19 @@ class Token:
         "false": False,
     }
     
-    def raise_exception(self, reason):
-        raise Exception(
-            f"Invalid token value: {reason}."
-        )
-    
     def validate_next_char(self, char: str):
         if self.type is TokenType.NUMBER and not char.isdigit():
-            self.raise_exception(f"expecting digit token symbol. found: {char}")
+            raise InvalidTokenException(char)
         if self.type is TokenType.MIX:
             token = self._value + char
             if not any(token == option[:len(token)] for option in self.MIX_TOKENS):
-                self.raise_exception(f"expecting null, true, false. found: {token}")
+                raise InvalidTokenException(token)
     
     def _validate_final_token(self):
         if self.type is not TokenType.MIX:
             return
         if self._value not in self.MIX_TOKENS:
-            self.raise_exception(f"expecting null, true, false. found: {self._value}")
+            raise InvalidTokenException(self._value)
     
     def get_value(self):
         self._validate_final_token()
@@ -207,10 +204,10 @@ class JsonLoader:
         return self.result
 
 
-def load(file_path: str) -> list[str]:
+def load(file_path: str, encoding: str = "utf-8") -> list[str]:
     reader = JsonLoader()
     result = None
-    with open(file_path) as f:
+    with open(file_path, encoding=encoding) as f:
         result = reader.load(f)
         char = f.read(1)
         while char:
@@ -235,4 +232,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("filename")
     args = parser.parse_args()
-    load(args.filename)
+    result = load(args.filename)
+    print(result)
+

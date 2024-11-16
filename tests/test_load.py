@@ -1,3 +1,4 @@
+from json_parser.exceptions import InvalidTokenException
 from ..parser import load
 import pytest
 
@@ -31,6 +32,15 @@ import pytest
             {
                 "key": {"key4": ["val4"], "key5": {"key6": ["val6", "val7"]}},
                 "key2": ["val1", "val2"],
+            },
+        ),
+        (
+            "tests/test_files/valid_nested_3.json",
+            {
+                "key": "value",
+                "key-n": 101,
+                "key-o": {"inner key": "inner value"},
+                "key-l": ["list value", 10, True, False, None, -20],
             },
         ),
     ],
@@ -112,10 +122,11 @@ def test_invalid_close_bracket():
         ("tests/test_files/invalid_false.json", "Fa"),
         ("tests/test_files/invalid_true.json", "truet"),
         ("tests/test_files/invalid_null.json", "nul"),
+        ("tests/test_files/invalid_nested_3.json", "'l"),
 
     ],
 )
 def test_invalid_mix_tokens(path, error_token):
-    with pytest.raises(Exception) as e:
+    with pytest.raises(InvalidTokenException) as e:
         load(path)
-    assert f"expecting null, true, false. found: {error_token}." in str(e.value)
+    assert e.value.invalid_token == error_token
