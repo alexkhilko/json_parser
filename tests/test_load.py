@@ -1,5 +1,5 @@
-from json_parser.exceptions import InvalidTokenException
-from ..parser import load
+from src.exceptions import InvalidJsonException, InvalidTokenException
+from src.parser import load
 import pytest
 
 
@@ -57,7 +57,7 @@ def test_load(path, expected):
     ],
 )
 def test_load_empty(path):
-    with pytest.raises(Exception) as e:
+    with pytest.raises(InvalidJsonException) as e:
         load(path)
     assert "Invalid json" in str(e.value)
 
@@ -69,7 +69,7 @@ def test_load_empty(path):
     ],
 )
 def test_fail_invali_key(path):
-    with pytest.raises(Exception) as e:
+    with pytest.raises(InvalidJsonException) as e:
         load(path)
     assert "Invalid json: expecting quotes" in str(e.value)
 
@@ -81,7 +81,7 @@ def test_fail_invali_key(path):
     ],
 )
 def test_fail_extra_comma(path):
-    with pytest.raises(Exception) as e:
+    with pytest.raises(InvalidJsonException) as e:
         load(path)
     assert "Invalid json: waiting for new key" in str(e.value)
 
@@ -93,9 +93,9 @@ def test_fail_extra_comma(path):
     ],
 )
 def test_fail_after_end(path):
-    with pytest.raises(Exception) as e:
+    with pytest.raises(InvalidJsonException) as e:
         load(path)
-    assert "Invalid json: expecting no characters after close bracket" in str(e.value)
+    assert "Invalid json: expecting no characters after closing bracket" in str(e.value)
 
 
 @pytest.mark.parametrize(
@@ -105,13 +105,13 @@ def test_fail_after_end(path):
     ],
 )
 def test_fail_between_tokens(path):
-    with pytest.raises(Exception) as e:
+    with pytest.raises(InvalidJsonException) as e:
         load(path)
     assert "Invalid json: expected comma" in str(e.value)
 
 
 def test_invalid_close_bracket():
-    with pytest.raises(Exception) as e:
+    with pytest.raises(InvalidJsonException) as e:
         load("tests/test_files/invalid_close_bracket.json")
     assert "Invalid json: Invalid character } before start" in str(e.value)
 
